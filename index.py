@@ -1,9 +1,6 @@
 from openai import OpenAI
 import json
 import PyPDF2
-from flask import Flask
-
-app = Flask(__name__)
 
 client = OpenAI(
   base_url = "https://integrate.api.nvidia.com/v1",
@@ -37,7 +34,7 @@ class Mixer():
                     "role": "user",
                     "content": f"You are helping me create a science game where the user puts together items to produce new items, for an educational purpose. \
                            You are provided a textbook and first must give me all the import items from the text, all of which are biological things. \
-                           The output of this request must be in a comma separated list like such with as many items as possible: element1, element2, element3, ... \
+                           The output of this request must be in a comma separated list.  \
                            Have no other text output except for the list and do not add any delimiters except for commas. Don't choose items that represent types of science fields, only the actual real life things. \
                            Make each item in the list as unique as possible from each other. The textbook input is the following: {text}",
                 }
@@ -45,7 +42,8 @@ class Mixer():
             model="nvidia/llama-3.1-nemotron-70b-instruct",
         )
         response = chat_completion.choices[0].message.content
-        self.base_elements = [item.strip() for item in response.split(",")]
+        self.base_elements = [item.strip().lower() for item in response.split(",")]
+        print(response)
 
         chat_completion = client.chat.completions.create(
             messages=[
@@ -61,17 +59,19 @@ class Mixer():
             model="nvidia/llama-3.1-nemotron-70b-instruct",
         )
         response = chat_completion.choices[0].message.content
-        self.discovered = set([item.strip() for item in response.split(",")])
-        print(self.discovered)
-        print(sorted(self.base_elements))
+        self.discovered = set([item.strip().lower() for item in response.split(",")])
+        print(f"You have the following items: {self.discovered}")
         self.d = {}
 
     def combine_elements(self, el1, el2):
+        el1 = el1.lower()
+        el2 = el2.lower()
+        if not (el1 in self.discovered and el2 in self.discovered):
+            print("Invalid - Elements not discovered!")
+            return
         elements_in = tuple(sorted([el1, el2]))
         
-        if elements_in in self.d:
-            return self.d[elements_in]
-        else:
+        if elements_in not in self.d:
             base_prompt = f"You are a science expert that is given two items and returns what is most likely created by combining those two things. The thing that \
                     is created should come from the following list of items: {self.base_elements}. If none of these elements can be reasonably created with the passed in items, \
                     then you decide what other possible item could be created as a result. If the combination of items makes no sense or if one item is a subset of the other, make the result be the word 'NONE' " + \
@@ -107,8 +107,15 @@ class Mixer():
         print(f"{mix.el1} + {mix.el2} = {mix.result}")
         print(f"Explanation: {mix.explanation}")
 
-
-textbook = pdf_to_string("textbook.pdf")
+textbook = pdf_to_string("textbook_small.pdf")
 starter_elements = 4
 mixer = Mixer(textbook, starter_elements)
-mixer.combine_elements("phosphate group", "amino group")
+
+while True:
+    print(f"Your current inventory is: {mixer.discovered}")
+    element1 = input("Element 1: ")
+    element2 = input("Element 2: ")
+    try:
+        mixer.combine_elements(element1, element2)
+    except:
+        print("LLM Error - retry")
