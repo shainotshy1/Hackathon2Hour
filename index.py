@@ -73,13 +73,13 @@ class Mixer():
         
         if elements_in not in self.d:
             base_prompt = f"You are a science expert that is given two items and returns what is most likely created by combining those two things. The thing that \
-                    is created should come from the following list of items: {self.base_elements}. If none of these elements can be reasonably created with the passed in items, \
+                    is created should come from the following list of items: {[item for item in  self.base_elements if item not in self.discovered]}. If none of these elements can be reasonably created with the passed in items, \
                     then you decide what other possible item could be created as a result. If the combination of items makes no sense or if one item is a subset of the other, make the result be the word 'NONE' " + \
                     "The output of this request must be in the following format, with no other text output except for what is given here, and no delimiters outside the brackets: " + \
-                    """{   \
+                    '{  \
                     "result":"_",\
-                    "explanation":"_"\
-                    }""" + "Make the result a one word response unless it is absolutely necessary that the result be multiple words."
+                    "explanation":"_"  \
+                    }' + " Make the result a one word response unless it is absolutely necessary that the result be multiple words."
             chat_completion = client.chat.completions.create(
                 messages=[
                     {
@@ -91,6 +91,8 @@ class Mixer():
             )
 
             response = chat_completion.choices[0].message.content
+            response = "{" + response.split("{", 1)[1].split("}", 1)[0] + "}"
+
             data = json.loads(response)
             element = data['result']
             valid = True
@@ -98,7 +100,7 @@ class Mixer():
                 print("Invalid combination")
                 valid = False
             elif element not in self.discovered:
-                self.discovered.add(element)
+                self.discovered.add(element.lower())
             explanation = data['explanation']
             mix = Mix(el1, el2, element, explanation, valid)
             self.d[elements_in] = mix
@@ -111,11 +113,13 @@ textbook = pdf_to_string("textbook_small.pdf")
 starter_elements = 4
 mixer = Mixer(textbook, starter_elements)
 
+print("\n\n******\nWELCOME to the Biology discovery game!!! Mix elements to discover new ones and learn about the textbook content along the way!\n******\n")
 while True:
     print(f"Your current inventory is: {mixer.discovered}")
     element1 = input("Element 1: ")
     element2 = input("Element 2: ")
     try:
         mixer.combine_elements(element1, element2)
-    except:
+    except Exception as e:
+        print(e)
         print("LLM Error - retry")
